@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Usuarios | CRUD</title>
+  <style>
+    :root { color-scheme: light; font-family: Georgia, serif; --ink: #17212b; --muted: #65717d; --line: #d7dfe3; --accent: #d8613c; --paper: #f7f4ee; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; color: var(--ink); background: linear-gradient(135deg, #eef4f0, var(--paper)); }
+    main { width: min(1050px, calc(100% - 32px)); margin: 0 auto; padding: 56px 0; }
+    header { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 32px; }
+    h1 { margin: 0; font-size: clamp(2.4rem, 7vw, 5rem); line-height: .9; letter-spacing: -0.04em; font-weight: 500; }
+    .eyebrow { color: var(--accent); font: 700 .75rem/1.2 Arial, sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+    .layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 24px; align-items: start; }
+    section { background: rgba(255,255,255,.72); border: 1px solid var(--line); padding: 24px; box-shadow: 8px 8px 0 rgba(23,33,43,.07); }
+    h2 { margin: 0 0 20px; font-size: 1.35rem; font-weight: 500; }
+    label { display: block; margin: 16px 0 7px; font: 700 .75rem Arial, sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    input { width: 100%; border: 1px solid var(--line); background: #fff; padding: 12px; color: var(--ink); font: 1rem Georgia, serif; }
+    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button { border: 0; background: var(--ink); color: #fff; padding: 12px 16px; font: 700 .78rem Arial, sans-serif; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+    button:hover { background: var(--accent); }
+    button.secondary { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+    .actions { display: flex; gap: 8px; margin-top: 22px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: .92rem; }
+    th, td { text-align: left; padding: 15px 10px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
+    td:last-child { white-space: nowrap; text-align: right; }
+    .empty { color: var(--muted); padding: 28px 10px; text-align: center; }
+    .message { min-height: 20px; margin: 14px 0 0; color: var(--accent); font: .85rem Arial, sans-serif; }
+    @media (max-width: 720px) { main { padding: 32px 0; } header { display: block; } .eyebrow { margin-bottom: 14px; } .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><div class="eyebrow">Base de datos · usuarios</div><h1>Personas<br>registradas</h1></div>
+    </header>
+    <div class="layout">
+      <section>
+        <h2 id="form-title">Nuevo usuario</h2>
+        <form id="user-form">
+          <input id="user-id" type="hidden">
+          <label for="nombre">Nombre</label>
+          <input id="nombre" name="nombre" required autocomplete="name">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required autocomplete="email">
+          <div class="actions"><button type="submit">Guardar</button><button class="secondary" id="cancel" type="button" hidden>Cancelar</button></div>
+          <p class="message" id="message" role="status"></p>
+        </form>
+      </section>
+      <section>
+        <h2>Usuarios</h2>
+        <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Email</th><th>Acciones</th></tr></thead><tbody id="users"><tr><td class="empty" colspan="3">Cargando...</td></tr></tbody></table></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const form = document.querySelector('#user-form');
+    const users = document.querySelector('#users');
+    const message = document.querySelector('#message');
+    const cancel = document.querySelector('#cancel');
+    const formTitle = document.querySelector('#form-title');
+    const idInput = document.querySelector('#user-id');
+
+    async function request(url, options) {
+      const response = await fetch(url, options);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo completar la operación');
+      return data;
+    }
+
+    async function loadUsers() {
+      try {
+        const data = await request('/api/usuarios');
+        users.innerHTML = data.length ? data.map(user => `<tr><td>${escapeHtml(user.nombre)}</td><td>${escapeHtml(user.email)}</td><td><button data-edit="${user.id}" class="secondary">Editar</button> <button data-delete="${user.id}">Eliminar</button></td></tr>`).join('') : '<tr><td class="empty" colspan="3">No hay usuarios registrados.</td></tr>';
+      } catch (error) { message.textContent = error.message; }
+    }
+
+    function escapeHtml(value) { return value.replace(/[&<>'"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character])); }
+    function resetForm() { form.reset(); idInput.value = ''; formTitle.textContent = 'Nuevo usuario'; cancel.hidden = true; }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const id = idInput.value;
+      const payload = JSON.stringify({ nombre: form.nombre.value, email: form.email.value });
+      try {
+        await request(id ? `/api/usuarios/${id}` : '/api/usuarios', { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: payload });
+        resetForm(); message.textContent = 'Usuario guardado.'; await loadUsers();
+      } catch (error) { message.textContent = error.message; }
+    });
+
+    users.addEventListener('click', async event => {
+      const editId = event.target.dataset.edit;
+      const deleteId = event.target.dataset.delete;
+      try {
+        if (editId) { const user = await request(`/api/usuarios/${editId}`); idInput.value = user.id; form.nombre.value = user.nombre; form.email.value = user.email; formTitle.textContent = 'Editar usuario'; cancel.hidden = false; form.nombre.focus(); }
+        if (deleteId && confirm('¿Eliminar este usuario?')) { await request(`/api/usuarios/${deleteId}`, { method: 'DELETE' }); await loadUsers(); }
+      } catch (error) { message.textContent = error.message; }
+    });
+    cancel.addEventListener('click', resetForm);
+    loadUsers();
+  </script>
+</body>
+</html>
