@@ -17,23 +17,70 @@ def get_connection():
 
 def initialize_database():
     with get_connection() as connection:
-        tables = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+        expected_columns = {
+            "usu_id": "INTEGER",
+            "usu_usuario": "VARCHAR(50)",
+            "usu_nombre": "VARCHAR(50)",
+            "usu_apellido": "VARCHAR(50)",
         }
-        if "usuario" in tables and "usuarios" not in tables:
-            connection.execute("ALTER TABLE usuario RENAME TO usuarios")
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL,
-                email TEXT NOT NULL UNIQUE
+        current_columns = {
+            row["name"]: row["type"].upper()
+            for row in connection.execute("PRAGMA table_info(usuarios)")
+        }
+
+        if current_columns and current_columns != expected_columns:
+            old_id = "usu_id" if "usu_id" in current_columns else "id"
+            connection.execute("ALTER TABLE usuarios RENAME TO usuarios_anterior")
+            connection.execute(
+                """
+                CREATE TABLE usuarios (
+                    usu_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usu_usuario VARCHAR(50),
+                    usu_nombre VARCHAR(50),
+                    usu_apellido VARCHAR(50)
+                )
+                """
             )
+            connection.execute(
+                f"""
+                INSERT INTO usuarios
+                    (usu_id, usu_usuario, usu_nombre, usu_apellido)
+                SELECT {old_id}, usu_usuario, usu_nombre, usu_apellido
+                FROM usuarios_anterior
+                """
+            )
+            connection.execute("DROP TABLE usuarios_anterior")
+        elif not current_columns:
+            connection.execute(
+                """
+                CREATE TABLE usuarios (
+                    usu_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usu_usuario VARCHAR(50),
+                    usu_nombre VARCHAR(50),
+                    usu_apellido VARCHAR(50)
+                )
+                """
+            )
+
+        updated = connection.execute(
             """
+            UPDATE usuarios
+            SET usu_usuario = ?, usu_nombre = ?, usu_apellido = ?
+            WHERE usu_usuario = ?
+            """,
+            ("Tobiasibarra", "tobias", "ibarra", "tobias"),
         )
+        if updated.rowcount == 0 and connection.execute(
+            "SELECT 1 FROM usuarios WHERE usu_usuario = ? LIMIT 1",
+            ("Tobiasibarra",),
+        ).fetchone() is None:
+            connection.execute(
+                """
+                INSERT INTO usuarios (usu_usuario, usu_nombre, usu_apellido)
+                VALUES (?, ?, ?)
+                """,
+                ("Tobiasibarra", "tobias", "ibarra"),
+            )
 
 
 def user_from_row(row):
@@ -73,7 +120,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         if path == "/api/usuarios":
             with get_connection() as connection:
                 rows = connection.execute(
-                    "SELECT id, nombre, email FROM usuarios ORDER BY id DESC"
+                    "SELECT usu_id, usu_usuario, usu_nombre, usu_apellido "
+                    "FROM usuarios ORDER BY usu_id DESC"
                 ).fetchall()
             self.send_json(200, [user_from_row(row) for row in rows])
             return
@@ -85,7 +133,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             with get_connection() as connection:
                 row = connection.execute(
-                    "SELECT id, nombre, email FROM usuarios WHERE id = ?", (user_id,)
+                    "SELECT usu_id, usu_usuario, usu_nombre, usu_apellido "
+                    "FROM usuarios WHERE usu_id = ?",
+                    (user_id,),
                 ).fetchone()
             if row is None:
                 self.send_error_json(404, "Usuario no encontrado")
@@ -101,23 +151,26 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         try:
             data = self.read_json()
-            nombre = str(data.get("nombre", "")).strip()
-            email = str(data.get("email", "")).strip()
-            if not nombre or not email:
-                self.send_error_json(400, "Nombre y email son obligatorios")
+            usuario = str(data.get("usu_usuario", "")).strip()
+            nombre = str(data.get("usu_nombre", "")).strip()
+            apellido = str(data.get("usu_apellido", "")).strip()
+            if not usuario or not nombre or not apellido:
+                self.send_error_json(400, "Usuario, nombre y apellido son obligatorios")
                 return
             with get_connection() as connection:
                 cursor = connection.execute(
-                    "INSERT INTO usuarios (nombre, email) VALUES (?, ?)",
-                    (nombre, email),
+                    "INSERT INTO usuarios (usu_usuario, usu_nombre, usu_apellido) "
+                    "VALUES (?, ?, ?)",
+                    (usuario, nombre, apellido),
                 )
                 row = connection.execute(
-                    "SELECT id, nombre, email FROM usuarios WHERE id = ?",
+                    "SELECT usu_id, usu_usuario, usu_nombre, usu_apellido "
+                    "FROM usuarios WHERE usu_id = ?",
                     (cursor.lastrowid,),
                 ).fetchone()
             self.send_json(201, user_from_row(row))
         except sqlite3.IntegrityError:
-            self.send_error_json(409, "El email ya está registrado")
+            self.send_error_json(409, "El usuario ya está registrado")
         except ValueError as error:
             self.send_error_json(400, str(error))
 
@@ -128,25 +181,29 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         try:
             data = self.read_json()
-            nombre = str(data.get("nombre", "")).strip()
-            email = str(data.get("email", "")).strip()
-            if not nombre or not email:
-                self.send_error_json(400, "Nombre y email son obligatorios")
+            usuario = str(data.get("usu_usuario", "")).strip()
+            nombre = str(data.get("usu_nombre", "")).strip()
+            apellido = str(data.get("usu_apellido", "")).strip()
+            if not usuario or not nombre or not apellido:
+                self.send_error_json(400, "Usuario, nombre y apellido son obligatorios")
                 return
             with get_connection() as connection:
                 cursor = connection.execute(
-                    "UPDATE usuarios SET nombre = ?, email = ? WHERE id = ?",
-                    (nombre, email, user_id),
+                    "UPDATE usuarios SET usu_usuario = ?, usu_nombre = ?, "
+                    "usu_apellido = ? WHERE usu_id = ?",
+                    (usuario, nombre, apellido, user_id),
                 )
                 if cursor.rowcount == 0:
                     self.send_error_json(404, "Usuario no encontrado")
                     return
                 row = connection.execute(
-                    "SELECT id, nombre, email FROM usuarios WHERE id = ?", (user_id,)
+                    "SELECT usu_id, usu_usuario, usu_nombre, usu_apellido "
+                    "FROM usuarios WHERE usu_id = ?",
+                    (user_id,),
                 ).fetchone()
             self.send_json(200, user_from_row(row))
         except sqlite3.IntegrityError:
-            self.send_error_json(409, "El email ya está registrado")
+            self.send_error_json(409, "El usuario ya está registrado")
         except ValueError as error:
             self.send_error_json(400, str(error))
 
@@ -156,7 +213,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_error_json(404, "Ruta no encontrada")
             return
         with get_connection() as connection:
-            cursor = connection.execute("DELETE FROM usuarios WHERE id = ?", (user_id,))
+            cursor = connection.execute(
+                "DELETE FROM usuarios WHERE usu_id = ?", (user_id,)
+            )
         if cursor.rowcount == 0:
             self.send_error_json(404, "Usuario no encontrado")
             return

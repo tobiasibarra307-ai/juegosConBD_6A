@@ -42,17 +42,19 @@
         <h2 id="form-title">Nuevo usuario</h2>
         <form id="user-form">
           <input id="user-id" type="hidden">
-          <label for="nombre">Nombre</label>
-          <input id="nombre" name="nombre" required autocomplete="name">
-          <label for="email">Email</label>
-          <input id="email" name="email" type="email" required autocomplete="email">
+          <label for="usu_usuario">Usuario</label>
+          <input id="usu_usuario" name="usu_usuario" required autocomplete="username">
+          <label for="usu_nombre">Nombre</label>
+          <input id="usu_nombre" name="usu_nombre" required autocomplete="given-name">
+          <label for="usu_apellido">Apellido</label>
+          <input id="usu_apellido" name="usu_apellido" required autocomplete="family-name">
           <div class="actions"><button type="submit">Guardar</button><button class="secondary" id="cancel" type="button" hidden>Cancelar</button></div>
           <p class="message" id="message" role="status"></p>
         </form>
       </section>
       <section>
         <h2>Usuarios</h2>
-        <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Email</th><th>Acciones</th></tr></thead><tbody id="users"><tr><td class="empty" colspan="3">Cargando...</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Apellido</th><th>Acciones</th></tr></thead><tbody id="users"><tr><td class="empty" colspan="4">Cargando...</td></tr></tbody></table></div>
       </section>
     </div>
   </main>
@@ -74,7 +76,7 @@
     async function loadUsers() {
       try {
         const data = await request('/api/usuarios');
-        users.innerHTML = data.length ? data.map(user => `<tr><td>${escapeHtml(user.nombre)}</td><td>${escapeHtml(user.email)}</td><td><button data-edit="${user.id}" class="secondary">Editar</button> <button data-delete="${user.id}">Eliminar</button></td></tr>`).join('') : '<tr><td class="empty" colspan="3">No hay usuarios registrados.</td></tr>';
+        users.innerHTML = data.length ? data.map(user => `<tr><td>${escapeHtml(user.usu_usuario)}</td><td>${escapeHtml(user.usu_nombre)}</td><td>${escapeHtml(user.usu_apellido)}</td><td><button data-edit="${user.usu_id}" class="secondary">Editar</button> <button data-delete="${user.usu_id}">Eliminar</button></td></tr>`).join('') : '<tr><td class="empty" colspan="4">No hay usuarios registrados.</td></tr>';
       } catch (error) { message.textContent = error.message; }
     }
 
@@ -84,7 +86,7 @@
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const id = idInput.value;
-      const payload = JSON.stringify({ nombre: form.nombre.value, email: form.email.value });
+      const payload = JSON.stringify({ usu_usuario: form.usu_usuario.value, usu_nombre: form.usu_nombre.value, usu_apellido: form.usu_apellido.value });
       try {
         await request(id ? `/api/usuarios/${id}` : '/api/usuarios', { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: payload });
         resetForm(); message.textContent = 'Usuario guardado.'; await loadUsers();
@@ -95,7 +97,7 @@
       const editId = event.target.dataset.edit;
       const deleteId = event.target.dataset.delete;
       try {
-        if (editId) { const user = await request(`/api/usuarios/${editId}`); idInput.value = user.id; form.nombre.value = user.nombre; form.email.value = user.email; formTitle.textContent = 'Editar usuario'; cancel.hidden = false; form.nombre.focus(); }
+        if (editId) { const user = await request(`/api/usuarios/${editId}`); idInput.value = user.usu_id; form.usu_usuario.value = user.usu_usuario; form.usu_nombre.value = user.usu_nombre; form.usu_apellido.value = user.usu_apellido; formTitle.textContent = 'Editar usuario'; cancel.hidden = false; form.usu_usuario.focus(); }
         if (deleteId && confirm('¿Eliminar este usuario?')) { await request(`/api/usuarios/${deleteId}`, { method: 'DELETE' }); await loadUsers(); }
       } catch (error) { message.textContent = error.message; }
     });
