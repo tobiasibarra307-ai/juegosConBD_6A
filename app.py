@@ -2,11 +2,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 import json
+import os
 import sqlite3
 
 BASE_DIR = Path(__file__).parent
 DATABASE_PATH = BASE_DIR / "usuarios.db"
 INDEX_PATH = BASE_DIR / "index.html"
+PORT = int(os.environ.get("PORT", "8000"))
 
 
 def get_connection():
@@ -224,8 +226,8 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     initialize_database()
-    server = ThreadingHTTPServer(("127.0.0.1", 8000), RequestHandler)
-    print("Servidor disponible en http://127.0.0.1:8000")
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), RequestHandler)
+    print(f"Servidor disponible en http://127.0.0.1:{PORT}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
